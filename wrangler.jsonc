@@ -7,7 +7,7 @@
   "d1_databases": [{
     "binding": "DB",
     "database_name": "muse-codes",
-    "database_id": "REPLACE_WITH_YOUR_D1_DATABASE_ID",
+    "database_id": "df293726-2046-42e5-81fb-6276998d177e",
     "migrations_dir": "migrations"
   }],
   "triggers": { "crons": ["0 * * * *"] }
