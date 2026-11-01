@@ -1,36 +1,50 @@
-# Muse 邀请码分享站
+# Muse Code Share
 
-独立的中文社区分享站。免费提交、先提交先展示、点击复制、提交时间和剩余展示时间；每个号码单独展示 24 小时，提交者可用同一浏览器提前下架。本站不连接 Muse 账户，也无法核实真实兑换次数。
+A free community invite-code sharing site for Muse, with English, Simplified Chinese, and Japanese interfaces. Share a code, find one in submission order, and click to copy.
 
-## 网站内容
+## Features
 
-- AI Style Guide 已链接到 https://ai-style-guild.pages.dev/ 。
-- 视频区默认显示「即将上线」。视频发布后，编辑 `public/config.js` 中的 `tutorialUrl`，填写完整的 HTTPS 视频链接即可，无需修改页面。
-- 本站 24 小时展示期限与官方新用户加入后 48 小时兑换期限是两个不同概念。
-- 不内置虚构邀请码，也不自动将你截图中的号码发布到网站。
+- **Three languages:** English, Chinese, and Japanese, with browser-language detection and a saved language preference.
+- **First shared, first listed:** Codes appear in submission order.
+- **Individual 24-hour listings:** Each code has its own submission timestamp, countdown, and expiration time. Newer codes remain listed when older ones expire.
+- **Click to copy:** Copying does not redeem a code or consume an invitation.
+- **Owner removal:** Contributors can remove their codes early using the same browser they used to submit them.
+- **Shared storage:** Cloudflare D1 stores codes for all visitors.
+- **Related project:** [AI Style Guide](https://ai-style-guild.pages.dev/), an AI-powered personal style guide covering hair, eyewear, outfits, and colors.
+- **Tutorial section:** Ready for a Muse signup and usage video.
 
-## 部署到 GitHub + Cloudflare
+This is an independent community project, not affiliated with, endorsed by, or partnered with Meta or Muse. Code availability, eligibility, and rewards depend on official Muse rules. This site cannot verify remaining invitation uses.
 
-使用 **Cloudflare Workers** 项目（支持静态页面和服务端数据库），不是只上传 HTML 的静态 Pages 项目。AI Style Guide 原站无需修改。
+## Listing time versus redemption time
 
-1. 将本文件夹的内容上传到一个新的 GitHub 仓库，建议仓库名 `muse-code-share`。如果放在已有仓库的 `muse` 子目录，后续 Cloudflare 根目录设为 `muse`。
-2. 在 Cloudflare 控制台进入 **Storage & databases → D1 SQL database**，创建 `muse-codes` 数据库。
-3. 复制数据库 ID，替换 `wrangler.jsonc` 中的 `REPLACE_WITH_YOUR_D1_DATABASE_ID`，提交到 GitHub。数据库 ID 是资源标识，不是 API 密钥。
-4. 打开该 D1 数据库的 **Console**，执行 `migrations/0001_init.sql` 全部内容，初始化表。只需一次。也可在本地登录 Cloudflare 后执行 `npm run db:remote`。
-5. 进入 **Workers & Pages → Create application**，选择连接 GitHub，创建 Worker。Worker 名称须为 `muse-code-share`，与 `wrangler.jsonc` 一致。
-6. 根目录：新独立仓库用 `/`；已有仓库用 `/muse`。构建命令留空（无需编译）；部署命令填 `npm run deploy`。Cloudflare 会安装 package.json 依赖。
-7. 部署成功后打开 Cloudflare 提供的 `workers.dev` 地址。可在设置中绑定自有域名。之后推送到关联的生产分支会自动部署。
+The site's **24-hour listing period** starts when a code is submitted here. The **48-hour redemption window** shown on the Muse invitation screen starts when a new user joins Muse. These are separate timers. Please redeem promptly and check the current rules inside Muse.
 
-Cloudflare 文档：
-- https://developers.cloudflare.com/workers/ci-cd/builds/
-- https://developers.cloudflare.com/workers/ci-cd/builds/configuration/
-- https://developers.cloudflare.com/d1/get-started/
+## Deploy to Cloudflare
 
-如果新建应用界面变动，关键是选择支持 Wrangler 配置的 Worker，而不是只部署静态目录。
+This repository is designed for **Cloudflare Workers with static assets and a D1 database**. It needs a backend; uploading only the HTML files to a static site will not enable code sharing.
 
-## 本地运行
+1. Create a D1 database named `muse-codes` in the Cloudflare dashboard.
+2. Replace `REPLACE_WITH_YOUR_D1_DATABASE_ID` in `wrangler.jsonc` with your database ID and commit the change. The database ID is a resource identifier, not an API secret.
+3. Open the database's SQL console and run the contents of `migrations/0001_init.sql` once to create the tables. Alternatively, after authenticating Wrangler locally, run `npm run db:remote`.
+4. Create a Worker connected to this GitHub repository. Use `muse-code-share` as the Worker name to match `wrangler.jsonc`.
+5. Use the repository root as the project root. Leave the build command empty and set the deploy command to `npm run deploy`. Cloudflare installs the package dependencies automatically.
+6. Open the `workers.dev` address returned after deployment. You can also connect a custom domain.
 
-需要 Node.js 22 或更新版本：
+After connecting the production branch, future pushes automatically deploy updates. If you move this project into a subdirectory of another repository, adjust the Cloudflare project root accordingly. AI Style Guide is a separate site and does not need changes.
+
+Cloudflare documentation:
+
+- [Workers Git integration](https://developers.cloudflare.com/workers/ci-cd/builds/)
+- [Build and deployment configuration](https://developers.cloudflare.com/workers/ci-cd/builds/configuration/)
+- [Getting started with D1](https://developers.cloudflare.com/d1/get-started/)
+
+## Local preview
+
+Install Node.js 22 or later.
+
+On Windows, double-click **`start-preview.bat`**. It installs missing dependencies, prepares the local database, starts the preview, and opens your browser at `http://127.0.0.1:8787/`. If the preview is already running, it opens the existing instance. Keep the terminal open while testing; close it or press Ctrl+C to stop the server. The companion `start-preview.ps1` must stay beside the BAT file.
+
+To start manually:
 
 ```sh
 npm install
@@ -38,30 +52,35 @@ npm run db:local
 npm run dev
 ```
 
-按终端提示打开本地地址。本地 D1 和线上 D1 独立，测试数据不会自动上传。
+Local and production databases are separate. Preview data is not automatically uploaded to Cloudflare.
+
+Run the backend tests:
 
 ```sh
 npm test
 ```
 
-## 计时和数据
+## Customize content
 
-所有创建和到期时间以服务端为准。列表只返回未到期号码，按提交时间升序；客户端每 30 秒刷新、每 15 秒更新倒计时和移除到期号码。每小时定时清理过期数据库记录，不会影响较新的号码。即使物理清理尚未运行，到期号码也不会被接口返回。
+- **Tutorial video:** Set `tutorialUrl` in `public/config.js` to the video's full HTTPS URL. An empty URL displays the coming-soon state.
+- **Video descriptions:** Edit the `en`, `zh`, and `ja` entries in `tutorialDescription` in the same file.
+- **Translations:** Edit `public/i18n.js`. Page text, dates, countdowns, copy feedback, submission results, error messages, and validation prompts follow the selected language.
+- **Page layout and styles:** Edit `public/index.html` and `public/style.css`.
 
-同一有效号码重复提交不会延长展示。到期后重新提交视为新记录。每个 IP 每分钟最多提交一次（午夜的限流标识会切换）。不记录明文 IP；限流使用每日变化的摘要，定期清理。复制不会自动移除号码或推断已兑换。
+## Timing, privacy, and limits
 
-提交成功会在当前浏览器本地保存专属下架凭证。服务端只保存凭证摘要；其他访客无法通过列表获得凭证。清除浏览器数据或换设备后，不能主动下架旧号码，仍会自动到期。
+The server determines submission and expiration timestamps. The API returns only unexpired codes, ordered by submission time. The browser refreshes the list every 30 seconds and updates countdowns and removes expired entries every 15 seconds. An hourly scheduled task deletes expired database records without affecting newer codes. Expired codes are excluded by the API even before physical cleanup runs.
 
-本版本包含基础限流；如公开推广后出现大量垃圾提交，可在 Cloudflare 增加 Turnstile 和流量规则。当前没有管理员审核后台或官方邀请码校验功能。
+Submitting an already active code does not extend its listing. A code submitted again after expiration becomes a new listing. Copying a code does not remove it or indicate successful redemption.
 
+Each IP address can submit at most one code per minute. The rate-limit identifier changes at the UTC day boundary. The app stores a daily IP digest for rate limiting rather than the raw IP address and periodically cleans up those records.
 
-## 三语界面
+After submission, the browser stores a private removal token locally. The server stores only its hash and never includes it in the public code list. Clearing browser storage or switching devices loses early-removal access; automatic expiration still applies.
 
-网站右上角支持 English / 中文 / 日本語 切换。首次访问根据浏览器语言选择，之后记住用户设置。页面文案、倒计时、日期、复制提示、提交结果、错误提示和表单验证均随语言切换。翻译集中在 `public/i18n.js`；视频说明的三语内容在 `public/config.js` 中分别维护。
+The app includes basic rate limiting. It does not include an administrator moderation dashboard, Turnstile integration, or official Muse code verification. Additional abuse protection can be added if needed.
 
+## License
 
-## 开源许可
+[MIT License](LICENSE) — Copyright (c) 2026 **zhhwang168**.
 
-本项目原创代码采用 [MIT License](LICENSE)，版权声明为 Copyright (c) 2026 zhhwang168。允许使用、修改、分发和商用，须保留版权和许可声明。
-
-此许可不授予 Meta、Muse 等第三方商标或服务的权利，也不替代 Muse 官方使用与邀请规则。第三方依赖遵循各自的许可证。
+You may use, modify, distribute, and use the code commercially, provided the copyright and license notices are retained. The license does not grant rights to third-party trademarks or services or replace official Muse terms. Dependencies remain subject to their own licenses.
