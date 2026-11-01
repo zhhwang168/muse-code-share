@@ -1,5 +1,7 @@
 # Muse Code Share
 
+**Live site: [Muse Code Share](https://muse-code-share.zhhwang168-cb4.workers.dev/)**
+
 A free community invite-code sharing site for Muse, with English, Simplified Chinese, and Japanese interfaces. Share a code, find one in submission order, and click to copy.
 
 ## Features
