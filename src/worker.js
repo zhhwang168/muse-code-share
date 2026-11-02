@@ -6,6 +6,9 @@ async function ensureCounter(db) {
     const ready = (async () => {
       await db.prepare('CREATE TABLE IF NOT EXISTS copy_events (event_id TEXT PRIMARY KEY, code_id TEXT NOT NULL, created_at INTEGER NOT NULL)').run();
       await db.prepare('CREATE INDEX IF NOT EXISTS copy_events_code ON copy_events(code_id)').run();
+      await db.prepare('CREATE TABLE IF NOT EXISTS copy_guards (event_id TEXT PRIMARY KEY, code_id TEXT NOT NULL, visitor_hash TEXT NOT NULL, network_hash TEXT NOT NULL, created_at INTEGER NOT NULL)').run();
+      await db.prepare('CREATE INDEX IF NOT EXISTS copy_guards_visitor ON copy_guards(code_id, visitor_hash, created_at)').run();
+      await db.prepare('CREATE INDEX IF NOT EXISTS copy_guards_network ON copy_guards(network_hash, created_at)').run();
       await db.prepare('CREATE TABLE IF NOT EXISTS site_changes (change_id TEXT PRIMARY KEY, applied_at INTEGER NOT NULL)').run();
       // Owner-requested one-time relisting of the two existing records. The marker
       // and exact original IDs/timestamps prevent future deploys from renewing them.
@@ -41,10 +44,21 @@ export default {
         const id = copyRoute[1];
         const active = await env.DB.prepare('SELECT id FROM codes WHERE id = ? AND expires_at > ?').bind(id, now).first();
         if (!active) return json({ error: '邀请码已下架或你没有操作权限' }, 404);
-        // Retries with the same event ID cannot count twice; concurrent copies each get a row.
-        await env.DB.prepare('INSERT OR IGNORE INTO copy_events (event_id, code_id, created_at) SELECT ?, id, ? FROM codes WHERE id = ? AND expires_at > ?').bind(eventId, now, id, now).run();
+        const visitor = request.headers.get('X-Copy-Visitor') || '';
+        if (visitor && !/^[a-f0-9-]{36}$/i.test(visitor)) return json({ error: '提交格式无效' }, 400);
+        const ip = request.headers.get('CF-Connecting-IP') || 'local';
+        const networkHash = await hash(`${Math.floor(now / (24 * HOUR))}:${ip}`);
+        const visitorHash = await hash(visitor || `network:${ip}`);
+        // A transactional conditional INSERT enforces the rolling quota even
+        // across parallel requests/tabs. Old clients fall back to the network.
+        await env.DB.batch([
+          env.DB.prepare('INSERT OR IGNORE INTO copy_guards (event_id, code_id, visitor_hash, network_hash, created_at) SELECT ?, id, ?, ?, ? FROM codes WHERE id = ? AND expires_at > ? AND (SELECT COUNT(*) FROM copy_guards WHERE code_id = ? AND visitor_hash = ? AND created_at > ?) < 2 AND (SELECT COUNT(*) FROM copy_guards WHERE network_hash = ? AND created_at > ?) < 10')
+            .bind(eventId, visitorHash, networkHash, now, id, now, id, visitorHash, now - 24 * HOUR, networkHash, now - 60000),
+          env.DB.prepare('INSERT OR IGNORE INTO copy_events (event_id, code_id, created_at) SELECT event_id, code_id, created_at FROM copy_guards WHERE event_id = ? AND code_id = ? AND visitor_hash = ?').bind(eventId, id, visitorHash)
+        ]);
         const row = await env.DB.prepare('SELECT COUNT(*) AS copy_count FROM copy_events WHERE code_id = ?').bind(id).first();
-        return json({ copy_count: row.copy_count, estimated_remaining: Math.max(0, 30 - row.copy_count) });
+        const recorded = await env.DB.prepare('SELECT event_id FROM copy_guards WHERE event_id = ? AND code_id = ? AND visitor_hash = ?').bind(eventId, id, visitorHash).first();
+        return json({ copy_count: row.copy_count, estimated_remaining: Math.max(0, 30 - row.copy_count), limited: !recorded });
       }
       if (url.pathname.startsWith('/api/codes/') && request.method === 'DELETE') {
         const id = url.pathname.slice('/api/codes/'.length);
@@ -87,6 +101,7 @@ export default {
       env.DB.prepare('DELETE FROM codes WHERE expires_at <= ?').bind(now),
       env.DB.prepare('DELETE FROM submissions WHERE submitted_at < ?').bind(now - HOUR)
       ,env.DB.prepare('DELETE FROM copy_events WHERE code_id NOT IN (SELECT id FROM codes)')
+      ,env.DB.prepare('DELETE FROM copy_guards WHERE created_at <= ?').bind(now - 24 * HOUR)
     ]);
   }
 };

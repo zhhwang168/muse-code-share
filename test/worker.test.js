@@ -20,8 +20,8 @@ function setup() {
     async batch(statements) { return Promise.all(statements.map(s => s.run())); }
   };
   const env = { DB: binding, ASSETS: { fetch: () => new Response('page') } };
-  const call = (path = '/api/codes', { method = 'GET', code, token, ip = '127.0.0.1', origin = 'https://example.com', eventId } = {}) => worker.fetch(new Request(`https://example.com${path}`, {
-    method, headers: { Origin: origin, 'Content-Type': 'application/json', 'CF-Connecting-IP': ip, ...(eventId ? {'X-Copy-Event':eventId} : {}), ...(token ? { 'X-Delete-Token': token } : {}) },
+  const call = (path = '/api/codes', { method = 'GET', code, token, ip = '127.0.0.1', origin = 'https://example.com', eventId, visitor } = {}) => worker.fetch(new Request(`https://example.com${path}`, {
+    method, headers: { Origin: origin, 'Content-Type': 'application/json', 'CF-Connecting-IP': ip, ...(eventId ? {'X-Copy-Event':eventId} : {}), ...(visitor ? {'X-Copy-Visitor':visitor} : {}), ...(token ? { 'X-Delete-Token': token } : {}) },
     ...(code !== undefined ? { body: JSON.stringify({ code }) } : {})
   }), env);
   return { db, env, call };
@@ -73,7 +73,7 @@ test('copy counter counts site events, retries are idempotent, estimate clamps a
   assert.equal(result.copy_count,1);assert.equal(result.estimated_remaining,29);
   result=await (await call(path,{method:'POST',eventId})).json();
   assert.equal(result.copy_count,1);
-  await Promise.all(Array.from({length:30},()=>call(path,{method:'POST',eventId:crypto.randomUUID()})));
+  await Promise.all(Array.from({length:30},(_,i)=>call(path,{method:'POST',eventId:crypto.randomUUID(),visitor:crypto.randomUUID(),ip:'unique-'+i})));
   const listed=await (await call()).json();assert.equal(listed.codes[0].copy_count,31);
   result=await (await call(path,{method:'POST',eventId})).json();assert.equal(result.estimated_remaining,0);
   assert.equal((await call(path,{method:'POST',eventId,origin:'https://bad.com'})).status,403);
@@ -97,5 +97,35 @@ test('owner-requested relisting only touches the two original records and runs o
   await worker.fetch(new Request('https://example.com/api/codes'),{...env,DB:wrapped});
   assert.equal(db.prepare('SELECT created_at FROM codes WHERE code = ?').get('4JD1B2').created_at,a.created_at);
   assert.equal(db.prepare('SELECT COUNT(*) AS n FROM codes').get().n,3);
+  db.close();
+});
+
+test('same visitor counts twice across tabs and networks; copying remains available', async () => {
+  const {db,call}=setup();
+  const created=await (await call('/api/codes',{method:'POST',code:'LIMIT123'})).json();
+  const before=db.prepare('SELECT created_at,expires_at FROM codes WHERE id = ?').get(created.id);
+  const path=`/api/codes/${created.id}/copy`,visitor=crypto.randomUUID();
+  const results=await Promise.all(Array.from({length:15},(_,i)=>call(path,{method:'POST',eventId:crypto.randomUUID(),visitor,ip:'net-'+i})));
+  assert.ok(results.every(r=>r.status===200));
+  const bodies=await Promise.all(results.map(r=>r.json()));
+  assert.equal(bodies.filter(r=>!r.limited).length,2);
+  const result=await (await call(path,{method:'POST',eventId:crypto.randomUUID(),visitor})).json();
+  assert.equal(result.copy_count,2);assert.equal(result.estimated_remaining,28);assert.equal(result.limited,true);
+  // Another visitor on the same network has a separate per-code quota.
+  const other=await (await call(path,{method:'POST',eventId:crypto.randomUUID(),visitor:crypto.randomUUID()})).json();
+  assert.equal(other.copy_count,3);assert.equal(other.limited,false);
+  assert.deepEqual(db.prepare('SELECT created_at,expires_at FROM codes WHERE id = ?').get(created.id),before);
+  // Sliding window: once a counted event is older than 24h, one new count is allowed.
+  db.prepare('UPDATE copy_guards SET created_at = ? WHERE event_id = (SELECT event_id FROM copy_guards WHERE visitor_hash = (SELECT visitor_hash FROM copy_guards LIMIT 1) LIMIT 1)').run(Date.now()-86400001);
+  const renewed=await (await call(path,{method:'POST',eventId:crypto.randomUUID(),visitor})).json();
+  assert.equal(renewed.limited,false);assert.equal(renewed.copy_count,4);
+  db.close();
+});
+test('network safeguard limits identifier rotation without blocking copy responses', async () => {
+  const {db,call}=setup();
+  const created=await (await call('/api/codes',{method:'POST',code:'NETWORK1'})).json();
+  const path=`/api/codes/${created.id}/copy`;
+  for(let i=0;i<14;i++)assert.equal((await call(path,{method:'POST',eventId:crypto.randomUUID(),visitor:crypto.randomUUID()})).status,200);
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM copy_events').get().n,10);
   db.close();
 });

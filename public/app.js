@@ -19,16 +19,23 @@ function remaining(expires) {
 }
 let manualItem = null;
 const copying = new Set();
+let copyVisitor;
+try {
+  copyVisitor = localStorage.getItem('muse-copy-visitor');
+  if (!/^[a-f0-9-]{36}$/i.test(copyVisitor || '')) {
+    copyVisitor = crypto.randomUUID(); localStorage.setItem('muse-copy-visitor', copyVisitor);
+  }
+} catch { copyVisitor = ''; } // The server applies a network fallback if storage is unavailable.
 async function recordCopy(item) {
   const eventId = crypto.randomUUID();
-  const options = { method: 'POST', headers: { 'X-Copy-Event': eventId } };
+  const options = { method: 'POST', headers: { 'X-Copy-Event': eventId, ...(copyVisitor ? { 'X-Copy-Visitor': copyVisitor } : {}) } };
   try {
     let result;
     try { result = await api(`/api/codes/${item.id}/copy`, options); }
     catch { result = await api(`/api/codes/${item.id}/copy`, options); }
     const current = codes.find(c => c.id === item.id);
     if (current) { current.copy_count = Math.max(current.copy_count || 0, result.copy_count); render(); }
-    toast('已复制邀请码，请尽快前往 Muse 兑换');
+    toast(result.limited ? '已复制。本次不重复计数。' : '已复制邀请码，请尽快前往 Muse 兑换');
   } catch { toast('号码已复制，但本站计数暂未更新'); }
 }
 async function copy(item) {

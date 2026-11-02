@@ -93,3 +93,8 @@ Each code starts with a site estimate of 30. Successful clipboard copies increme
 
 At the owner's request, the two original launch records are relisted once for 24 hours when this update first runs. A persistent change marker prevents later deployments from renewing them again. Private removal credentials are preserved. Local data backups are excluded from Git.
 
+
+### Repeat-copy protection
+
+A visitor can contribute at most two counted copies per code in a rolling 24-hour window. Further copies still work and show a brief message instead of a popup. The browser stores a random visitor ID; the server hashes it and enforces the limit using an atomic database operation. If browser storage is unavailable, a network-based fallback is used. A network safeguard additionally caps credited events at ten per minute to reduce identifier-rotation abuse; it does not block clipboard access. Changing browser identity and network can still evade these basic protections. Existing copy totals and code expiry timestamps are retained. Requests made before this protection launched cannot be attributed retroactively. No raw IP address is stored in the guard table; its records are purged after 24 hours.
+

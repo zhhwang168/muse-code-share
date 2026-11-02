@@ -1,11 +1,14 @@
 (() => {
   const messages = {
+    '同一访客对同一个码，24 小时内最多计数 2 次。之后仍可复制，但不再扣减本站估算余量。': ['For each visitor, copies of the same code count at most twice in 24 hours. You can still copy again, without reducing the site estimate.', '同じコードは、同じ訪問者につき24時間以内に2回まで集計します。それ以降もコピーできますが、本サイトの推定残り回数は減りません。'],
+    '已复制。本次不重复计数。': ['Copied. No additional count this time.', 'コピーしました。今回は追加カウントしません。'],
+
     '本站估算剩余：{count} / 30': ['Site estimate: {count} / 30 left', '本サイトの推定残り：{count} / 30'],
     '本站已复制：{count} 次': ['Copies on this site: {count}', '本サイトでのコピー：{count}回'],
     '本站估算额度已用完，官方余量请在 Muse 核实': ['Site estimate exhausted. Check actual availability in Muse.', '本サイトの推定枠は終了。実際の残り回数は Muse でご確認ください。'],
     '号码已复制，但本站计数暂未更新': ['Code copied, but the site counter could not update.', 'コピーしましたが、サイトのカウントを更新できませんでした。'],
     '我已手动复制（记录一次）': ['I copied it manually (count once)', '手動コピーしました（1回記録）'],
-    '本站估算从 30 次开始，每次成功复制减 1。复制不代表兑换，其他渠道的使用无法统计；实际剩余次数以 Muse 官方为准。现有码从本功能上线后开始统计。': ['The site estimate starts at 30 and decreases after each successful copy. Copying is not redemption; usage elsewhere cannot be tracked. Actual remaining uses are determined by Muse. Existing codes are counted from this feature’s launch.', '本サイトの推定残り回数は30から始まり、コピー成功ごとに1減ります。コピーは利用完了を意味せず、他の場所での利用は集計できません。実際の残り回数は Muse でご確認ください。既存コードは本機能の開始時から集計します。'],
+    '本站估算从 30 次开始，每次计入统计的复制减 1。复制不代表兑换，其他渠道的使用无法统计；实际剩余次数以 Muse 官方为准。现有码从本功能上线后开始统计。': ['The site estimate starts at 30 and decreases for each counted copy. Copying is not redemption; usage elsewhere cannot be tracked. Actual remaining uses are determined by Muse. Existing codes are counted from this feature’s launch.', '本サイトの推定残り回数は30から始まり、集計対象のコピーごとに1減ります。コピーは利用完了を意味せず、他の場所での利用は集計できません。実際の残り回数は Muse でご確認ください。既存コードは本機能の開始時から集計します。'],
 
     'Muse 邀请码分享站 · 把灵感传下去': ['Muse Invite Hub · Pass it forward', 'Muse 招待コード共有 · チャンスをつなごう'],
     '分享站': ['Invite Hub', '招待コード共有'],
