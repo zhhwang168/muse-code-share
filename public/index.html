@@ -41,6 +41,7 @@
         <p class="section-description">从前往后选择，点击号码即可复制。一次复制不会消耗邀请次数。</p>
         <div id="connection-status" role="status" class="connection-status">正在连接分享站…</div>
         <div id="code-list" class="code-list" aria-label="可复制的邀请码"></div>
+        <p class="counter-note">本站估算从 30 次开始，每次成功复制减 1。复制不代表兑换，其他渠道的使用无法统计；实际剩余次数以 Muse 官方为准。现有码从本功能上线后开始统计。</p>
         <div class="list-footnote"><span class="dot"></span> 每 30 秒自动更新 · 到期号码单独下架</div>
       </section>
       <aside id="share" class="share-panel">
@@ -55,6 +56,6 @@
   </main>
   <footer class="wrap footer"><a class="brand" href="/">muse<span class="brand-light"> / 社区分享站</span></a><p>独立社区项目，与 Meta 或 Muse 无隶属、授权或合作关系。<br>邀请码由用户自愿提供；可用性、兑换资格及奖励均以官方规则为准。</p><a href="https://ai-style-guild.pages.dev/" target="_blank" rel="noopener noreferrer">Made with curiosity ↗</a></footer>
   <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
-  <dialog id="copy-dialog"><h2>手动复制邀请码</h2><p>浏览器未允许自动复制，请长按或选中下方号码复制。</p><input id="manual-code" readonly aria-label="待复制的邀请码"><button class="button dark" id="close-copy" type="button">完成</button></dialog>
+  <dialog id="copy-dialog"><h2>手动复制邀请码</h2><p>浏览器未允许自动复制，请长按或选中下方号码复制。</p><input id="manual-code" readonly aria-label="待复制的邀请码"><button class="button dark" id="confirm-manual-copy" type="button">我已手动复制（记录一次）</button><button class="button dark" id="close-copy" type="button">完成</button></dialog>
 </body>
 </html>

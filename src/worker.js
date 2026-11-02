@@ -1,4 +1,25 @@
 const HOUR = 3600000;
+// Additive copy storage plus the explicitly requested one-time relisting below.
+const counterSchema = new WeakMap();
+async function ensureCounter(db) {
+  if (!counterSchema.has(db)) {
+    const ready = (async () => {
+      await db.prepare('CREATE TABLE IF NOT EXISTS copy_events (event_id TEXT PRIMARY KEY, code_id TEXT NOT NULL, created_at INTEGER NOT NULL)').run();
+      await db.prepare('CREATE INDEX IF NOT EXISTS copy_events_code ON copy_events(code_id)').run();
+      await db.prepare('CREATE TABLE IF NOT EXISTS site_changes (change_id TEXT PRIMARY KEY, applied_at INTEGER NOT NULL)').run();
+      // Owner-requested one-time relisting of the two existing records. The marker
+      // and exact original IDs/timestamps prevent future deploys from renewing them.
+      const now = Date.now();
+      await db.batch([
+        db.prepare("UPDATE codes SET created_at = ? + CASE WHEN id = 'b7074a1b-280a-4914-900e-ca9bce709164' THEN 1 ELSE 0 END, expires_at = ? + CASE WHEN id = 'b7074a1b-280a-4914-900e-ca9bce709164' THEN 1 ELSE 0 END WHERE ((id = ? AND created_at = ?) OR (id = ? AND created_at = ?)) AND NOT EXISTS (SELECT 1 FROM site_changes WHERE change_id = 'copy-counter-relist-2026-11-02')")
+          .bind(now, now + 24 * HOUR, 'f7a09b13-5761-40c2-bb07-ed94800e3539', 1793576332010, 'b7074a1b-280a-4914-900e-ca9bce709164', 1793583339106),
+        db.prepare("INSERT OR IGNORE INTO site_changes (change_id, applied_at) VALUES ('copy-counter-relist-2026-11-02', ?)").bind(now)
+      ]);
+    })().catch(error => { counterSchema.delete(db); throw error; });
+    counterSchema.set(db, ready);
+  }
+  await counterSchema.get(db);
+}
 const hash = async (value) => Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value))), b => b.toString(16).padStart(2, '0')).join('');
 const json = (data, status = 200) => Response.json(data, { status, headers: { 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' } });
 export default {
@@ -7,11 +28,24 @@ export default {
     if (!url.pathname.startsWith('/api/')) return env.ASSETS.fetch(request);
     try {
       const now = Date.now();
+      await ensureCounter(env.DB);
       if (url.pathname === '/api/codes' && request.method === 'GET') {
-        const { results } = await env.DB.prepare('SELECT id, code, created_at, expires_at FROM codes WHERE expires_at > ? ORDER BY created_at ASC, id ASC').bind(now).all();
+        const { results } = await env.DB.prepare('SELECT c.id, c.code, c.created_at, c.expires_at, (SELECT COUNT(*) FROM copy_events e WHERE e.code_id = c.id) AS copy_count FROM codes c WHERE c.expires_at > ? ORDER BY c.created_at ASC, c.id ASC').bind(now).all();
         return json({ codes: results, serverTime: now });
       }
       if (request.method !== 'GET' && request.headers.get('Origin') !== url.origin) return json({ error: '请求来源无效' }, 403);
+      const copyRoute = url.pathname.match(/^\/api\/codes\/([^/]+)\/copy$/);
+      if (copyRoute && request.method === 'POST') {
+        const eventId = request.headers.get('X-Copy-Event') || '';
+        if (!/^[a-f0-9-]{36}$/i.test(eventId)) return json({ error: '提交格式无效' }, 400);
+        const id = copyRoute[1];
+        const active = await env.DB.prepare('SELECT id FROM codes WHERE id = ? AND expires_at > ?').bind(id, now).first();
+        if (!active) return json({ error: '邀请码已下架或你没有操作权限' }, 404);
+        // Retries with the same event ID cannot count twice; concurrent copies each get a row.
+        await env.DB.prepare('INSERT OR IGNORE INTO copy_events (event_id, code_id, created_at) SELECT ?, id, ? FROM codes WHERE id = ? AND expires_at > ?').bind(eventId, now, id, now).run();
+        const row = await env.DB.prepare('SELECT COUNT(*) AS copy_count FROM copy_events WHERE code_id = ?').bind(id).first();
+        return json({ copy_count: row.copy_count, estimated_remaining: Math.max(0, 30 - row.copy_count) });
+      }
       if (url.pathname.startsWith('/api/codes/') && request.method === 'DELETE') {
         const id = url.pathname.slice('/api/codes/'.length);
         const token = request.headers.get('X-Delete-Token') || '';
@@ -48,9 +82,11 @@ export default {
   },
   async scheduled(event, env) {
     const now = Date.now();
+    await ensureCounter(env.DB);
     await env.DB.batch([
       env.DB.prepare('DELETE FROM codes WHERE expires_at <= ?').bind(now),
       env.DB.prepare('DELETE FROM submissions WHERE submitted_at < ?').bind(now - HOUR)
+      ,env.DB.prepare('DELETE FROM copy_events WHERE code_id NOT IN (SELECT id FROM codes)')
     ]);
   }
 };

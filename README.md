@@ -86,3 +86,10 @@ The app includes basic rate limiting. It does not include an administrator moder
 [MIT License](LICENSE) — Copyright (c) 2026 **zhhwang168**.
 
 You may use, modify, distribute, and use the code commercially, provided the copyright and license notices are retained. The license does not grant rights to third-party trademarks or services or replace official Muse terms. Dependencies remain subject to their own licenses.
+
+## On-site copy counter
+
+Each code starts with a site estimate of 30. Successful clipboard copies increment a shared server-side counter; the estimate is max(0, 30 minus copies). Copying is not redemption, and usage outside this site is unknown. Actual availability is determined by Muse. Existing records start counting when the feature launches. The estimate does not disable copying or automatically remove a code at zero. A manual-copy fallback counts only when the visitor confirms copying. Event IDs prevent retry double-counting. Counter tables are created automatically without rebuilding the codes table.
+
+At the owner's request, the two original launch records are relisted once for 24 hours when this update first runs. A persistent change marker prevents later deployments from renewing them again. Private removal credentials are preserved. Local data backups are excluded from Git.
+

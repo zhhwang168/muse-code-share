@@ -17,9 +17,30 @@ function remaining(expires) {
   const minutes = Math.max(1, Math.ceil((expires - (Date.now() + offset)) / 60000));
   return minutes >= 60 ? t('{hours} 小时 {minutes} 分后下架', {hours: Math.floor(minutes / 60), minutes: minutes % 60}) : t('{minutes} 分钟后下架', {minutes});
 }
-async function copy(code) {
-  try { await navigator.clipboard.writeText(code); toast('已复制邀请码，请尽快前往 Muse 兑换'); }
-  catch { $('#manual-code').value = code; $('#copy-dialog').showModal(); $('#manual-code').focus(); $('#manual-code').select(); }
+let manualItem = null;
+const copying = new Set();
+async function recordCopy(item) {
+  const eventId = crypto.randomUUID();
+  const options = { method: 'POST', headers: { 'X-Copy-Event': eventId } };
+  try {
+    let result;
+    try { result = await api(`/api/codes/${item.id}/copy`, options); }
+    catch { result = await api(`/api/codes/${item.id}/copy`, options); }
+    const current = codes.find(c => c.id === item.id);
+    if (current) { current.copy_count = Math.max(current.copy_count || 0, result.copy_count); render(); }
+    toast('已复制邀请码，请尽快前往 Muse 兑换');
+  } catch { toast('号码已复制，但本站计数暂未更新'); }
+}
+async function copy(item) {
+  if (copying.has(item.id)) return;
+  copying.add(item.id);
+  try {
+    try { await navigator.clipboard.writeText(item.code); }
+    catch {
+      manualItem = item; $('#manual-code').value = item.code; $('#copy-dialog').showModal(); $('#manual-code').focus(); $('#manual-code').select(); return;
+    }
+    await recordCopy(item);
+  } finally { copying.delete(item.id); }
 }
 function render() {
   const active = codes.filter(c => c.expires_at > Date.now() + offset);
@@ -38,11 +59,15 @@ function render() {
     top.append(element('span', 'queue-number', `NO. ${String(index + 1).padStart(2, '0')}`), time);
     const button = element('button', 'copy-code'); button.type = 'button'; button.setAttribute('aria-label', t('复制邀请码 {code}', {code: item.code}));
     button.append(element('span', 'code-value', item.code), element('span', 'copy-label', t('复制 ⧉')));
-    button.addEventListener('click', () => copy(item.code));
+    button.addEventListener('click', () => copy(item));
+    const copies = Number(item.copy_count || 0);
+    const stats = element('div', 'copy-stats');
+    stats.append(element('strong', '', t('本站估算剩余：{count} / 30', {count: Math.max(0, 30 - copies)})), element('span', '', t('本站已复制：{count} 次', {count: copies})));
+    if (copies >= 30) stats.append(element('span', 'copy-exhausted', t('本站估算额度已用完，官方余量请在 Muse 核实')));
     const dates = element('div', 'card-date');
     const date = element('time', '', t('提交于 {date}', {date: dateFormat().format(item.created_at)})); date.dateTime = new Date(item.created_at).toISOString(); date.title = new Date(item.created_at).toLocaleString(window.I18N.locale);
     dates.append(date, element('span', '', t('社区分享')));
-    card.append(top, button, dates);
+    card.append(top, button, stats, dates);
     if (ownership[item.id]) {
       const remove = element('button', 'remove-code', t('已用完 / 下架')); remove.type = 'button';
       remove.addEventListener('click', async () => {
@@ -91,6 +116,10 @@ $('#share-form').addEventListener('submit', async (event) => {
   finally { button.disabled = false; }
 });
 $('#close-copy').addEventListener('click', () => $('#copy-dialog').close());
+$('#confirm-manual-copy').addEventListener('click', async () => {
+  const item = manualItem; manualItem = null; $('#copy-dialog').close();
+  if (item) await recordCopy(item);
+});
 const config = window.SITE_CONFIG || {};
 function updateVideo() {
   try {

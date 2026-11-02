@@ -20,8 +20,8 @@ function setup() {
     async batch(statements) { return Promise.all(statements.map(s => s.run())); }
   };
   const env = { DB: binding, ASSETS: { fetch: () => new Response('page') } };
-  const call = (path = '/api/codes', { method = 'GET', code, token, ip = '127.0.0.1', origin = 'https://example.com' } = {}) => worker.fetch(new Request(`https://example.com${path}`, {
-    method, headers: { Origin: origin, 'Content-Type': 'application/json', 'CF-Connecting-IP': ip, ...(token ? { 'X-Delete-Token': token } : {}) },
+  const call = (path = '/api/codes', { method = 'GET', code, token, ip = '127.0.0.1', origin = 'https://example.com', eventId } = {}) => worker.fetch(new Request(`https://example.com${path}`, {
+    method, headers: { Origin: origin, 'Content-Type': 'application/json', 'CF-Connecting-IP': ip, ...(eventId ? {'X-Copy-Event':eventId} : {}), ...(token ? { 'X-Delete-Token': token } : {}) },
     ...(code !== undefined ? { body: JSON.stringify({ code }) } : {})
   }), env);
   return { db, env, call };
@@ -61,5 +61,41 @@ test('only owner can remove a code; cross-origin and invalid input fail', async 
   assert.equal((await (await call()).json()).codes.length, 0);
   assert.equal((await call('/api/codes', { method: 'POST', code: '<script>', ip: '3' })).status, 400);
   assert.equal((await call('/api/codes', { method: 'POST', code: 'VALID1', origin: 'https://elsewhere.com' })).status, 403);
+  db.close();
+});
+
+test('copy counter counts site events, retries are idempotent, estimate clamps at zero', async () => {
+  const { db, call } = setup();
+  const created = await (await call('/api/codes', {method:'POST',code:'COUNT123'})).json();
+  const path = `/api/codes/${created.id}/copy`;
+  const eventId=crypto.randomUUID();
+  let result=await (await call(path,{method:'POST',eventId})).json();
+  assert.equal(result.copy_count,1);assert.equal(result.estimated_remaining,29);
+  result=await (await call(path,{method:'POST',eventId})).json();
+  assert.equal(result.copy_count,1);
+  await Promise.all(Array.from({length:30},()=>call(path,{method:'POST',eventId:crypto.randomUUID()})));
+  const listed=await (await call()).json();assert.equal(listed.codes[0].copy_count,31);
+  result=await (await call(path,{method:'POST',eventId})).json();assert.equal(result.estimated_remaining,0);
+  assert.equal((await call(path,{method:'POST',eventId,origin:'https://bad.com'})).status,403);
+  db.prepare('UPDATE codes SET expires_at = 0').run();
+  assert.equal((await call(path,{method:'POST',eventId:crypto.randomUUID()})).status,404);
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM copy_events').get().n,31);
+  db.close();
+});
+test('owner-requested relisting only touches the two original records and runs once', async () => {
+  const {db,env,call}=setup();
+  const insert=db.prepare('INSERT INTO codes VALUES (?, ?, ?, ?, ?)');
+  insert.run('f7a09b13-5761-40c2-bb07-ed94800e3539','4JD1B2',1793576332010,1793662732010,'private');
+  insert.run('b7074a1b-280a-4914-900e-ca9bce709164','3EBFWA',1793583339106,1793669739106,'private2');
+  insert.run('unrelated','OTHER12',100,Date.now()+86400000,'private3');
+  await call();
+  const a=db.prepare('SELECT * FROM codes WHERE code = ?').get('4JD1B2');
+  assert.equal(a.expires_at-a.created_at,86400000);assert.equal(a.delete_hash,'private');
+  assert.equal(db.prepare('SELECT created_at FROM codes WHERE id = ?').get('unrelated').created_at,100);
+  // A fresh binding simulates a new isolate/deploy while the marker persists.
+  const wrapped={prepare:(...args)=>env.DB.prepare(...args),batch:(...args)=>env.DB.batch(...args)};
+  await worker.fetch(new Request('https://example.com/api/codes'),{...env,DB:wrapped});
+  assert.equal(db.prepare('SELECT created_at FROM codes WHERE code = ?').get('4JD1B2').created_at,a.created_at);
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM codes').get().n,3);
   db.close();
 });
